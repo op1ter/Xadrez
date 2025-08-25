@@ -27,7 +27,31 @@ moves.add(newPos);
 }
 }
 }
-// Adicionar lógica para roque
-// ...
+// Adicionar ao método getPossibleMoves() do King
+// Verificar possibilidade de roque
+if (!hasMoved) { // Rei não se moveu
+// Roque curto (lado do rei)
+Piece rookKingSide = board.getPieceAt(
+new Position(position.getRow(), 7));
+if (rookKingSide instanceof Rook &&
+!((Rook)rookKingSide).hasMoved()) {
+boolean pathClear = true;
+for (int col = position.getColumn() + 1;
+col < 7; col++) {
+if (!board.isPositionEmpty(
+new Position(position.getRow(), col))) {
+pathClear = false;
+break;
+}
+}
+if (pathClear) {
+Position castlingPosition = new Position(
+position.getRow(), position.getColumn() + 2);
+moves.add(castlingPosition);
+}
+}
+// Roque longo (lado da rainha)
+// Lógica similar...
+}
 return moves;
 }
