@@ -1,36 +1,79 @@
+// ========================= src/model/pieces/Pawn.java =========================
 package model.pieces;
-import model.board.Board;
-import model.board.Position;
-import java.util.ArrayList;
-import java.util.List;
+
+import java.util.*;
+import model.board.*;
+
 public class Pawn extends Piece {
-public Pawn(Board board, boolean isWhite) {
-super(board, isWhite);
-}
-@Override
-public List getPossibleMoves() {
-List moves = new ArrayList<>();
-int direction = isWhite ? -1 : 1;
-// Movimento para frente
-Position front = new Position(
-position.getRow() + direction,
-position.getColumn()
-);
-if (front.isValid() && board.isPositionEmpty(front)) {
-moves.add(front);
-// Movimento duplo na primeira jogada
-if ((isWhite && position.getRow() == 6) ||
-(!isWhite && position.getRow() == 1)) {
-Position doubleFront = new Position(
-position.getRow() + 2 * direction,
-position.getColumn()
-);
-if (board.isPositionEmpty(doubleFront)) {
-moves.add(doubleFront);
-}
-}
-}
-// Capturas nas diagonais
-// ...
-return moves;
+
+    public Pawn(Board b, boolean w) {
+        super(b, w);
+    }
+
+    @Override
+    public String getSymbol() {
+        return "P";
+    }
+
+    @Override
+    public Piece copyFor(Board newBoard) {
+        Pawn clone = new Pawn(newBoard, isWhite);
+        clone.moved = this.moved;
+        if (this.position != null) {
+            clone.setPosition(new Position(position.getRow(), position.getColumn()));
+        }
+        return clone;
+    }
+
+    @Override
+    public List<Position> getPossibleMoves() {
+        List<Position> moves = new ArrayList<>();
+        int dir = isWhite ? -1 : 1;
+
+        // Um passo à frente
+        Position f1 = new Position(position.getRow() + dir, position.getColumn());
+        if (f1.isValid() && board.get(f1) == null) {
+            moves.add(f1);
+
+            // Dois passos à frente (se ainda não moveu)
+            Position f2 = new Position(position.getRow() + 2 * dir, position.getColumn());
+            if (!moved && f2.isValid() && board.get(f2) == null) {
+                moves.add(f2);
+            }
+        }
+
+        // Capturas diagonais
+        Position left = new Position(position.getRow() + dir, position.getColumn() - 1);
+        Position right = new Position(position.getRow() + dir, position.getColumn() + 1);
+
+        if (left.isValid()) {
+            Piece target = board.get(left);
+            if (target != null && target.isWhite() != isWhite) {
+                moves.add(left);
+            }
+        }
+        if (right.isValid()) {
+            Piece target = board.get(right);
+            if (target != null && target.isWhite() != isWhite) {
+                moves.add(right);
+            }
+        }
+
+        // Obs: En passant tratado no Game
+        return moves;
+    }
+
+    @Override
+    public List<Position> getAttacks() {
+        List<Position> attacks = new ArrayList<>();
+        int dir = isWhite ? -1 : 1;
+
+        Position left = new Position(position.getRow() + dir, position.getColumn() - 1);
+        Position right = new Position(position.getRow() + dir, position.getColumn() + 1);
+
+        if (left.isValid()) attacks.add(left);
+        if (right.isValid()) attacks.add(right);
+
+        return attacks;
+    }
 }

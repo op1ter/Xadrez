@@ -1,57 +1,70 @@
+// ========================= src/model/pieces/King.java =========================
 package model.pieces;
-import model.board.Board;
-import model.board.Position;
+
 import java.util.ArrayList;
 import java.util.List;
+import model.board.Board;
+import model.board.Position;
+
 public class King extends Piece {
-public King(Board board, boolean isWhite) {
-super(board, isWhite);
-}
-@Override
-public List getPossibleMoves() {
-List moves = new ArrayList<>();
-int[][] directions = {
-{-1, -1}, {-1, 0}, {-1, 1},
-{0, -1}, {0, 1},
-{1, -1}, {1, 0}, {1, 1}
-};
-for (int[] dir : directions) {
-Position newPos = new Position(
-position.getRow() + dir[0],
-position.getColumn() + dir[1]
-);
-if (newPos.isValid()) {
-Piece pieceAt = board.getPieceAt(newPos);
-if (pieceAt == null || pieceAt.isWhite() != isWhite) {
-moves.add(newPos);
-}
-}
-}
-// Adicionar ao método getPossibleMoves() do King
-// Verificar possibilidade de roque
-if (!hasMoved) { // Rei não se moveu
-// Roque curto (lado do rei)
-Piece rookKingSide = board.getPieceAt(
-new Position(position.getRow(), 7));
-if (rookKingSide instanceof Rook &&
-!((Rook)rookKingSide).hasMoved()) {
-boolean pathClear = true;
-for (int col = position.getColumn() + 1;
-col < 7; col++) {
-if (!board.isPositionEmpty(
-new Position(position.getRow(), col))) {
-pathClear = false;
-break;
-}
-}
-if (pathClear) {
-Position castlingPosition = new Position(
-position.getRow(), position.getColumn() + 2);
-moves.add(castlingPosition);
-}
-}
-// Roque longo (lado da rainha)
-// Lógica similar...
-}
-return moves;
+
+    public King(Board b, boolean w) { super(b, w); }
+
+    @Override
+    public String getSymbol() { return "K"; }
+
+    @Override
+    public Piece copyFor(Board newBoard) {
+        King k = new King(newBoard, isWhite);
+        k.moved = this.moved;
+        if (this.position != null) {
+            k.setPosition(new Position(this.position.getRow(), this.position.getColumn()));
+        }
+        return k;
+    }
+
+    @Override
+    public List<Position> getPossibleMoves() {
+        List<Position> moves = new ArrayList<>();
+        if (position == null || board == null) return moves;
+
+        for (int dr = -1; dr <= 1; dr++) {
+            for (int dc = -1; dc <= 1; dc++) {
+                if (dr == 0 && dc == 0) continue;
+                int r = position.getRow() + dr;
+                int c = position.getColumn() + dc;
+                if (r < 0 || r > 7 || c < 0 || c > 7) continue;
+
+                Position to = new Position(r, c);
+                Piece occ = board.get(to);
+                if (occ == null || occ.isWhite() != this.isWhite) {
+                    moves.add(to);
+                }
+            }
+        }
+
+        // Roques são tratados no controller.Game (candidatos adicionados lá)
+        return moves;
+    }
+
+    /**
+     * Opcional: casas atacadas pelo rei (as 8 adjacentes).
+     * Útil se quiser consultar ataques por peça diretamente.
+     */
+    @Override
+    public List<Position> getAttacks() {
+        List<Position> attacks = new ArrayList<>();
+        if (position == null) return attacks;
+
+        for (int dr = -1; dr <= 1; dr++) {
+            for (int dc = -1; dc <= 1; dc++) {
+                if (dr == 0 && dc == 0) continue;
+                int r = position.getRow() + dr;
+                int c = position.getColumn() + dc;
+                if (r < 0 || r > 7 || c < 0 || c > 7) continue;
+                attacks.add(new Position(r, c));
+            }
+        }
+        return attacks;
+    }
 }
