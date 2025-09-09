@@ -501,3 +501,9 @@ public class ChessGUI extends JFrame {
         SwingUtilities.invokeLater(ChessGUI::new);
     }
 }
+
+if (modoContraIA && jogadorAtual == 'B') {
+    Move movimentoIA = ia.fazerJogada(board, 'B');
+    board.makeMove(movimentoIA);
+    atualizarTela();
+}
