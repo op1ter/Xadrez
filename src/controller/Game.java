@@ -529,3 +529,11 @@ public class Game {
         }
     }
 }
+
+ChessAI ia = new IANivel3();
+
+// dentro do loop do jogo
+if (jogadorAtual == 'B') { // supondo que IA joga com brancas
+    Move movimentoIA = ia.fazerJogada(board, 'B');
+    board.makeMove(movimentoIA);
+}
