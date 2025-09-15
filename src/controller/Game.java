@@ -475,7 +475,7 @@ public class Game {
     }
 
     // --------- Snapshot ----------
-    private Game snapshotShallow() {
+    public Game snapshotShallow() {
         Game g = new Game(true);
         g.board = this.board.copy(); // IMPORTANT: Board.copy() must deep-copy pieces and fix their board refs.
         g.whiteToMove = this.whiteToMove;
