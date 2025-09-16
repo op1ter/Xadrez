@@ -1,4 +1,14 @@
-// ========================= src/controller/Game.java (VERSÃO FINAL COMPLETA) =========================
+/**
+ * Game.java
+ * Lógica principal do jogo de xadrez.
+ *
+ * Responsável por:
+ * - Gerenciar o estado do tabuleiro
+ * - Controlar o turno dos jogadores
+ * - Validar movimentos legais
+ * - Registrar histórico de jogadas
+ * - Detectar fim de jogo
+ */
 package controller;
 
 import java.util.ArrayList;
@@ -13,24 +23,28 @@ public class Game {
     private Board board;
     private boolean whiteToMove = true;
     private boolean gameOver = false;
-    private Position enPassantTarget = null;
-    private final List<String> history = new ArrayList<>();
-    private long zobristHash = 0L;
 
+    // Square where an en-passant capture may land (the empty square)
+    private Position enPassantTarget = null;
+
+    private final List<String> history = new ArrayList<>();
+
+    // Public ctor (starts a fresh game)
     public Game() {
         this.board = new Board();
         setupPieces();
-        this.zobristHash = computeInitialHash();
     }
 
-    // --- Getters Públicos ---
+    // Private ctor used for snapshots (no setup)
+    private Game(boolean empty) { /* intentionally empty */ }
+
+    // --------- Public getters ----------
     public Board board() { return board; }
     public boolean whiteToMove() { return whiteToMove; }
     public boolean isGameOver() { return gameOver; }
     public List<String> history() { return Collections.unmodifiableList(history); }
-    public long getZobristHash() { return this.zobristHash; }
 
-    // --- Controle do Jogo ---
+    // --------- New game ----------
     public void newGame() {
         this.board = new Board();
         this.whiteToMove = true;
@@ -38,186 +52,199 @@ public class Game {
         this.enPassantTarget = null;
         this.history.clear();
         setupPieces();
-        this.zobristHash = computeInitialHash();
     }
 
-    // --- Lógica de Movimento (para o jogador humano) ---
-    public void move(Position from, Position to, Character promotion) {
-        if (gameOver) return;
-        Piece p = board.get(from);
-        if (p == null || p.isWhite() != whiteToMove) return;
-
-        // >>>>>>>>>>>>> AQUI USAMOS O MÉTODO PÚBLICO `legalMovesFrom` <<<<<<<<<<<<<<<
-        List<Position> legal = legalMovesFrom(from);
-        if (!legal.contains(to)) return;
-
-        String moveNotation = generateMoveNotation(from, to, promotion);
-        makeMove(from, to, promotion);
-
-        // >>>>>>>>>>>>> AQUI USAMOS O MÉTODO PÚBLICO `isCheckmate` e `inCheck` <<<<<<<<<<<<<<<
-        if (isCheckmate(whiteToMove)) {
-            moveNotation += "#";
-            gameOver = true;
-        } else if (inCheck(whiteToMove)) {
-            moveNotation += "+";
-        }
-        addHistory(moveNotation);
-        if (!gameOver) checkGameEnd();
-    }
-
-    // =================================================================================
-    // MÉTODOS PÚBLICOS USADOS PELA ChessGUI
-    // =================================================================================
-
-    /**
-     * Retorna uma lista de todos os movimentos legais para a peça na posição 'from'.
-     * Este método é público para que a GUI possa destacar os quadrados corretos.
-     */
+    // --------- Query legal moves ----------
+    // Full legality including specials and "king safety"
     public List<Position> legalMovesFrom(Position from) {
-        Piece p = board.get(from);
-        if (p == null || p.isWhite() != whiteToMove) return List.of();
-        List<Position> moves = new ArrayList<>(p.getPossibleMoves());
-        addSpecialMoves(p, from, moves);
-        moves.removeIf(to -> leavesKingInCheck(from, to));
-        return moves;
+        return legalMovesFromWithSpecials(from);
     }
 
-    /**
-     * Verifica se um lado específico está em xeque.
-     * Público para que a GUI possa exibir o status de "Xeque!".
-     */
-    public boolean inCheck(boolean whiteSide) {
-        Position kingPos = findKing(whiteSide);
-        if (kingPos == null) return false;
-        return isSquareAttacked(kingPos, !whiteSide);
-    }
-    
-    /**
-     * Verifica se um movimento de um peão é uma jogada de promoção.
-     * Público para que a GUI saiba quando perguntar sobre a promoção.
-     */
     public boolean isPromotion(Position from, Position to) {
         Piece p = board.get(from);
         if (!(p instanceof Pawn)) return false;
         return p.isWhite() ? to.getRow() == 0 : to.getRow() == 7;
     }
 
-    // ... (O resto da classe, incluindo makeMove, unmakeMove e toda a lógica interna, continua aqui) ...
-    
-    // (Cole o resto do código do Game.java que eu te enviei na mensagem anterior aqui)
-    // Se você não tiver, eu reenvio a classe completa. Apenas para não poluir esta resposta.
-    // A parte crucial é garantir que os 3 métodos acima sejam `public`.
-    
-    // Vou colocar o resto da classe aqui para garantir que não haja dúvidas.
+    // --------- Make a move (only if legal) ----------
+    public void move(Position from, Position to, Character promotion) {
+        if (gameOver) return;
 
-    public MoveInfo makeMove(Position from, Position to) {
-        return makeMove(from, to, 'Q');
-    }
+        Piece p = board.get(from);
+        if (p == null || p.isWhite() != whiteToMove) return;
 
-    private MoveInfo makeMove(Position from, Position to, Character promotionChar) {
-        Piece mover = board.get(from);
-        Piece captured = board.get(to);
-        boolean wasMoved = mover.hasMoved();
-        Position oldEnPassantTarget = this.enPassantTarget;
-        boolean isPawn = mover instanceof Pawn;
-        boolean isKing = mover instanceof King;
-        boolean isCastle = isKing && Math.abs(from.getColumn() - to.getColumn()) == 2;
-        boolean isPromotion = isPawn && (to.getRow() == 0 || to.getRow() == 7);
-        MoveInfo info = new MoveInfo(mover, from, to, captured, wasMoved, oldEnPassantTarget, isCastle, isPromotion);
+        // Enforce legality (includes castling & en passant & king-safety)
+        List<Position> legal = legalMovesFromWithSpecials(from);
+        if (!legal.contains(to)) return;
 
-        zobristHash ^= Zobrist.PIECE_KEYS[getPieceIndex(mover)][from.getRow() * 8 + from.getColumn()];
-        if (captured != null) {
-            zobristHash ^= Zobrist.PIECE_KEYS[getPieceIndex(captured)][to.getRow() * 8 + to.getColumn()];
-        }
-        
-        board.set(to, mover);
-        board.set(from, null);
-        mover.setMoved(true);
+        boolean isKing = p instanceof King;
+        boolean isPawn = p instanceof Pawn;
+        int dCol = Math.abs(to.getColumn() - from.getColumn());
 
-        zobristHash ^= Zobrist.PIECE_KEYS[getPieceIndex(mover)][to.getRow() * 8 + to.getColumn()];
+        Piece capturedBefore = board.get(to); // for SAN-ish history
+        boolean targetIsKing = (capturedBefore instanceof King);
 
-        if (isPromotion) {
-            Piece newPiece = switch (Character.toUpperCase(promotionChar)) {
-                case 'R' -> new Rook(board, mover.isWhite());
-                case 'B' -> new Bishop(board, mover.isWhite());
-                case 'N' -> new Knight(board, mover.isWhite());
-                default -> new Queen(board, mover.isWhite());
-            };
-            board.set(to, newPiece);
-            zobristHash ^= Zobrist.PIECE_KEYS[getPieceIndex(mover)][to.getRow() * 8 + to.getColumn()];
-            zobristHash ^= Zobrist.PIECE_KEYS[getPieceIndex(newPiece)][to.getRow() * 8 + to.getColumn()];
-        }
-        if (isCastle) {
-            // Lógica simplificada de hash para roque
-        }
-        
-        this.whiteToMove = !this.whiteToMove;
-        zobristHash ^= Zobrist.BLACK_TO_MOVE_KEY;
-        
-        return info;
-    }
-
-    public void unmakeMove(MoveInfo info) {
-        this.whiteToMove = !this.whiteToMove;
-        zobristHash ^= Zobrist.BLACK_TO_MOVE_KEY;
-
-        Piece pieceToRestore = info.wasPromotion ? new Pawn(board, info.pieceMoved.isWhite()) : info.pieceMoved;
-        
-        zobristHash ^= Zobrist.PIECE_KEYS[getPieceIndex(board.get(info.to))][info.to.getRow() * 8 + info.to.getColumn()];
-
-        board.set(info.from, pieceToRestore);
-        pieceToRestore.setMoved(info.wasMoved);
-        board.set(info.to, info.pieceCaptured);
-
-        zobristHash ^= Zobrist.PIECE_KEYS[getPieceIndex(pieceToRestore)][info.from.getRow() * 8 + info.from.getColumn()];
-        if (info.pieceCaptured != null) {
-            zobristHash ^= Zobrist.PIECE_KEYS[getPieceIndex(info.pieceCaptured)][info.to.getRow() * 8 + info.to.getColumn()];
-        }
-        
-        this.enPassantTarget = info.previousEnPassantTarget;
-    }
-    
-    private void addSpecialMoves(Piece p, Position from, List<Position> moves) {
-        if (p instanceof Pawn && enPassantTarget != null) {
-            int dir = p.isWhite() ? -1 : 1;
-            if (from.getRow() + dir == enPassantTarget.getRow() && Math.abs(from.getColumn() - enPassantTarget.getColumn()) == 1) {
-                moves.add(enPassantTarget);
-            }
-        }
-        if (p instanceof King && !p.hasMoved() && !inCheck(p.isWhite())) {
+        // ------- Castling (already validated in legal moves) -------
+        if (isKing && dCol == 2) {
             int row = from.getRow();
-            if (canCastle(row, 7, new int[]{5, 6})) moves.add(new Position(row, 6));
-            if (canCastle(row, 0, new int[]{3, 2, 1})) moves.add(new Position(row, 2));
+            // Move king
+            board.set(to, p);
+            board.set(from, null);
+            p.setMoved(true);
+
+            String san;
+            if (to.getColumn() == 6) {
+                // Short castle: rook h->f
+                Piece rook = board.get(new Position(row, 7));
+                board.set(new Position(row, 5), rook);
+                board.set(new Position(row, 7), null);
+                if (rook != null) rook.setMoved(true);
+                san = "O-O";
+            } else {
+                // Long castle: rook a->d
+                Piece rook = board.get(new Position(row, 0));
+                board.set(new Position(row, 3), rook);
+                board.set(new Position(row, 0), null);
+                if (rook != null) rook.setMoved(true);
+                san = "O-O-O";
+            }
+
+            enPassantTarget = null;
+            // Switch side
+            whiteToMove = !whiteToMove;
+
+            // annotate + or #
+            if (isCheckmate(whiteToMove)) {
+                san += "#";
+                gameOver = true;
+            } else if (inCheck(whiteToMove)) {
+                san += "+";
+            }
+            addHistory(san);
+
+            if (!gameOver) checkGameEnd();
+            return;
         }
+
+        // ------- En Passant (already validated in legal moves) -------
+        boolean diagonal = from.getColumn() != to.getColumn();
+        boolean toIsEmpty = board.get(to) == null;
+        boolean isEnPassant = isPawn && diagonal && toIsEmpty && to.equals(enPassantTarget);
+
+        String moveStr;
+
+        if (isEnPassant) {
+            // Move pawn to target
+            board.set(to, p);
+            board.set(from, null);
+            // Remove the pawn that moved two squares last turn (victim behind target)
+            int dir = p.isWhite() ? 1 : -1;
+            Position victim = new Position(to.getRow() + dir, to.getColumn());
+            board.set(victim, null);
+            p.setMoved(true);
+            moveStr = coord(from) + "x" + coord(to) + " e.p.";
+            enPassantTarget = null;
+
+            // Switch side
+            whiteToMove = !whiteToMove;
+
+            // annotate + or #
+            if (isCheckmate(whiteToMove)) {
+                moveStr += "#";
+                gameOver = true;
+            } else if (inCheck(whiteToMove)) {
+                moveStr += "+";
+            }
+            addHistory(moveStr);
+
+            if (!gameOver) checkGameEnd();
+            return;
+        }
+
+        // ------- Promotion (auto-queen if promotion is null) -------
+        if (isPawn && isPromotion(from, to)) {
+            char ch = (promotion == null) ? 'Q' : Character.toUpperCase(promotion);
+            Piece np = switch (ch) {
+                case 'R' -> new Rook(board, p.isWhite());
+                case 'B' -> new Bishop(board, p.isWhite());
+                case 'N' -> new Knight(board, p.isWhite());
+                default  -> new Queen(board, p.isWhite());
+            };
+            np.setMoved(true);
+            board.set(from, null);
+            board.set(to, np);
+
+            // >>> segurança: se, por algum motivo, havia um Rei na casa alvo (não deveria), termina
+            if (targetIsKing) {
+                String san = coord(from) + "x" + coord(to) + "=" + np.getSymbol() + "#";
+                addHistory(san);
+                gameOver = true;
+                return;
+            }
+
+            moveStr = coord(from) + (capturedBefore != null ? "x" : "-") + coord(to) + "=" + np.getSymbol();
+        } else {
+            // Normal move / capture
+            board.set(to, p);
+            board.set(from, null);
+            p.setMoved(true);
+
+            // >>> segurança: se capturamos um Rei (não deveria acontecer), termina imediatamente
+            if (targetIsKing) {
+                String san = coord(from) + "x" + coord(to) + "#";
+                addHistory(san);
+                gameOver = true;
+                return;
+            }
+
+            moveStr = coord(from) + (capturedBefore != null ? "x" : "-") + coord(to);
+        }
+
+        // ------- En-passant availability after a double pawn push -------
+        if (isPawn && Math.abs(to.getRow() - from.getRow()) == 2) {
+            int mid = (to.getRow() + from.getRow()) / 2;
+            enPassantTarget = new Position(mid, from.getColumn());
+        } else {
+            enPassantTarget = null;
+        }
+
+        // Switch side
+        whiteToMove = !whiteToMove;
+
+        // annotate + or #
+        if (isCheckmate(whiteToMove)) {
+            moveStr += "#";
+            gameOver = true;
+        } else if (inCheck(whiteToMove)) {
+            moveStr += "+";
+        }
+
+        addHistory(moveStr);
+        if (!gameOver) checkGameEnd();
     }
 
-    private boolean canCastle(int row, int rookCol, int[] emptyCols) {
-        Piece rook = board.get(new Position(row, rookCol));
-        if (!(rook instanceof Rook) || rook.hasMoved()) return false;
-        for (int col : emptyCols) {
-            if (board.get(new Position(row, col)) != null) return false;
-        }
-        if (isSquareAttacked(new Position(row, 4), !whiteToMove) ||
-            isSquareAttacked(new Position(row, emptyCols[0]), !whiteToMove)) {
-            return false;
-        }
-        return emptyCols.length <= 1 || !isSquareAttacked(new Position(row, emptyCols[1]), !whiteToMove);
-    }
-
-    private boolean leavesKingInCheck(Position from, Position to) {
-        MoveInfo info = this.makeMove(from, to);
-        boolean isCheck = this.inCheck(info.pieceMoved.isWhite());
-        this.unmakeMove(info);
-        return isCheck;
+    // --------- Checks / mates ----------
+    public boolean inCheck(boolean whiteSide) {
+        Position k = findKing(whiteSide);
+        // Se o rei não existe no tabuleiro, trate como "em xeque" (estado inválido/terminal).
+        if (k == null) return true;
+        return isSquareAttacked(k, whiteSide);
     }
 
     public boolean isCheckmate(boolean whiteSide) {
         if (!inCheck(whiteSide)) return false;
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                Position from = new Position(r, c);
-                if (board.get(from) != null && board.get(from).isWhite() == whiteSide) {
-                    if (!legalMovesFrom(from).isEmpty()) return false;
+
+        // If the side has any legal move that avoids check, it's not mate
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                Position from = new Position(row, col);
+                Piece piece = board.get(from);
+                if (piece != null && piece.isWhite() == whiteSide) {
+                    for (Position to : legalMovesFromWithSpecials(from)) {
+                        Game g = snapshotShallow();
+                        g.forceMoveNoChecks(from, to);
+                        if (!g.inCheck(whiteSide)) return false;
+                    }
                 }
             }
         }
@@ -225,110 +252,269 @@ public class Game {
     }
 
     private void checkGameEnd() {
+        // Checkmate
         if (isCheckmate(whiteToMove)) {
             gameOver = true;
+            addHistory("Checkmate: " + (whiteToMove ? "White" : "Black") + " loses");
             return;
         }
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                Position from = new Position(r, c);
-                if (board.get(from) != null && board.get(from).isWhite() == whiteToMove) {
-                    if (!legalMovesFrom(from).isEmpty()) return;
+
+        // Stalemate: no legal moves and not in check
+        if (!inCheck(whiteToMove)) {
+            boolean hasAny = false;
+            for (int r = 0; r < 8 && !hasAny; r++) {
+                for (int c = 0; c < 8 && !hasAny; c++) {
+                    Position from = new Position(r, c);
+                    Piece piece = board.get(from);
+                    if (piece != null && piece.isWhite() == whiteToMove) {
+                        if (!legalMovesFromWithSpecials(from).isEmpty()) {
+                            hasAny = true;
+                        }
+                    }
                 }
             }
+            if (!hasAny) {
+                gameOver = true;
+                addHistory("Draw: stalemate");
+            }
         }
-        if (!inCheck(whiteToMove)) gameOver = true;
     }
 
-    private boolean isSquareAttacked(Position sq, boolean byWhite) {
-        int dir = byWhite ? -1 : 1;
-        Position p1 = new Position(sq.getRow() + dir, sq.getColumn() - 1);
-        Position p2 = new Position(sq.getRow() + dir, sq.getColumn() + 1);
-        if (p1.isValid() && board.get(p1) instanceof Pawn && board.get(p1).isWhite() == byWhite) return true;
-        if (p2.isValid() && board.get(p2) instanceof Pawn && board.get(p2).isWhite() == byWhite) return true;
-        int[][] knightJumps = {{-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}};
-        for(int[] j : knightJumps) {
-            Position p = new Position(sq.getRow() + j[0], sq.getColumn() + j[1]);
-            if (p.isValid() && board.get(p) instanceof Knight && board.get(p).isWhite() == byWhite) return true;
-        }
-        for (int dr = -1; dr <= 1; dr++) for (int dc = -1; dc <= 1; dc++) {
-            if (dr == 0 && dc == 0) continue;
-            Position p = new Position(sq.getRow() + dr, sq.getColumn() + dc);
-            if (p.isValid() && board.get(p) instanceof King && board.get(p).isWhite() == byWhite) return true;
-        }
-        int[][] directions = {{-1,0},{1,0},{0,-1},{0,1},{-1,-1},{-1,1},{1,-1},{1,1}};
-        for (int[] d : directions) {
-            Position p = new Position(sq.getRow(), sq.getColumn());
-            while(true) {
-                p = new Position(p.getRow() + d[0], p.getColumn() + d[1]);
-                if (!p.isValid()) break;
-                Piece piece = board.get(p);
-                if (piece != null) {
-                    if (piece.isWhite() == byWhite) {
-                        boolean isRookMove = (d[0] == 0 || d[1] == 0);
-                        if (isRookMove && (piece instanceof Rook || piece instanceof Queen)) return true;
-                        if (!isRookMove && (piece instanceof Bishop || piece instanceof Queen)) return true;
-                    }
-                    break;
+    // --------- Helpers: legality & attack maps ----------
+    private List<Position> legalMovesFromWithSpecials(Position from) {
+        Piece p = board.get(from);
+        if (p == null || p.isWhite() != whiteToMove) return List.of();
+
+        List<Position> moves = new ArrayList<>(p.getPossibleMoves());
+
+        // En Passant candidate square
+        if (p instanceof Pawn && enPassantTarget != null) {
+            int dir = p.isWhite() ? -1 : 1; // white pawns go up (row--), so attack is -1
+            if (from.getRow() + dir == enPassantTarget.getRow()
+                    && Math.abs(from.getColumn() - enPassantTarget.getColumn()) == 1) {
+                // Ensure there is an enemy pawn on the square behind target
+                Piece victim = board.get(new Position(enPassantTarget.getRow() - dir, enPassantTarget.getColumn()));
+                if (victim instanceof Pawn && victim.isWhite() != p.isWhite()) {
+                    moves.add(enPassantTarget);
                 }
             }
         }
+
+        // Castling candidates (king not moved, not in check, path empty, pass squares not attacked)
+        if (p instanceof King && !p.hasMoved() && !inCheck(p.isWhite())) {
+            int row = from.getRow();
+            // Short castle to g-file (col 6)
+            if (canCastle(row, 4, 7, 5, 6, p.isWhite())) moves.add(new Position(row, 6));
+            // Long castle to c-file (col 2)
+            if (canCastle(row, 4, 0, 3, 2, p.isWhite())) moves.add(new Position(row, 2));
+        }
+
+        // >>> NUNCA permitir "capturar" Rei inimigo
+        moves.removeIf(to -> {
+            Piece tgt = board.get(to);
+            return (tgt instanceof King) && (tgt.isWhite() != p.isWhite());
+        });
+
+        // Filter out moves que deixam o próprio rei em xeque
+        moves.removeIf(to -> leavesKingInCheck(from, to));
+        return moves;
+    }
+
+    private boolean canCastle(int row, int kingCol, int rookCol, int passCol1, int passCol2, boolean whiteSide) {
+        Piece rook = board.get(new Position(row, rookCol));
+        if (!(rook instanceof Rook) || rook.hasMoved()) return false;
+
+        // Path between king and rook must be empty
+        int step = (rookCol > kingCol) ? 1 : -1;
+        for (int c = kingCol + step; c != rookCol; c += step) {
+            if (board.get(new Position(row, c)) != null) return false;
+        }
+
+        // Squares king passes through (and destination) must not be attacked
+        Position p1 = new Position(row, passCol1);
+        Position p2 = new Position(row, passCol2);
+        if (isSquareAttacked(p1, whiteSide) || isSquareAttacked(p2, whiteSide)) return false;
+
+        return true;
+    }
+
+    private boolean leavesKingInCheck(Position from, Position to) {
+        Piece mover = board.get(from);
+        if (mover == null) return true;
+
+        Game g = snapshotShallow();
+        g.forceMoveNoChecks(from, to);
+        return g.inCheck(mover.isWhite());
+    }
+
+    /**
+     * True se `sq` está atacada por QUALQUER peça do lado oposto a `sideToProtect`.
+     * Implementa padrões de ataque corretos para peão/cavalo/rei/deslizantes.
+     */
+    private boolean isSquareAttacked(Position sq, boolean sideToProtect) {
+        int r = sq.getRow(), c = sq.getColumn();
+
+        // 1) Ataques de peão (peão inimigo estaria uma linha "atrás" da sq na direção dele)
+        int dir = sideToProtect ? -1 : 1; // protegendo brancas => peões pretos atacam +1 (descendo)
+        int rp = r - dir;
+        if (rp >= 0 && rp < 8) {
+            if (c - 1 >= 0) {
+                Piece p = board.get(new Position(rp, c - 1));
+                if (p instanceof Pawn && p.isWhite() != sideToProtect) return true;
+            }
+            if (c + 1 < 8) {
+                Piece p = board.get(new Position(rp, c + 1));
+                if (p instanceof Pawn && p.isWhite() != sideToProtect) return true;
+            }
+        }
+
+        // 2) Ataques de cavalo
+        int[][] KJUMPS = {{-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}};
+        for (int[] d : KJUMPS) {
+            int rr = r + d[0], cc = c + d[1];
+            if (rr>=0 && rr<8 && cc>=0 && cc<8) {
+                Piece p = board.get(new Position(rr, cc));
+                if (p instanceof Knight && p.isWhite() != sideToProtect) return true;
+            }
+        }
+
+        // 3) Ataques do rei (adjacentes)
+        for (int dr=-1; dr<=1; dr++) for (int dc=-1; dc<=1; dc++) {
+            if (dr==0 && dc==0) continue;
+            int rr = r+dr, cc = c+dc;
+            if (rr>=0 && rr<8 && cc>=0 && cc<8) {
+                Piece p = board.get(new Position(rr, cc));
+                if (p instanceof King && p.isWhite() != sideToProtect) return true;
+            }
+        }
+
+        // 4) Deslizantes: torre/rainha (linhas/colunas)
+        int[][] ROOK_DIRS = {{-1,0},{1,0},{0,-1},{0,1}};
+        for (int[] d : ROOK_DIRS) {
+            int rr = r + d[0], cc = c + d[1];
+            while (rr>=0 && rr<8 && cc>=0 && cc<8) {
+                Piece p = board.get(new Position(rr, cc));
+                if (p != null) {
+                    if (p.isWhite() != sideToProtect && (p instanceof Rook || p instanceof Queen)) return true;
+                    break;
+                }
+                rr += d[0]; cc += d[1];
+            }
+        }
+
+        // 5) Deslizantes: bispo/rainha (diagonais)
+        int[][] BISHOP_DIRS = {{-1,-1},{-1,1},{1,-1},{1,1}};
+        for (int[] d : BISHOP_DIRS) {
+            int rr = r + d[0], cc = c + d[1];
+            while (rr>=0 && rr<8 && cc>=0 && cc<8) {
+                Piece p = board.get(new Position(rr, cc));
+                if (p != null) {
+                    if (p.isWhite() != sideToProtect && (p instanceof Bishop || p instanceof Queen)) return true;
+                    break;
+                }
+                rr += d[0]; cc += d[1];
+            }
+        }
+
         return false;
     }
 
-    private Position findKing(boolean whiteSide) {
-        for (int r = 0; r < 8; r++) for (int c = 0; c < 8; c++) {
-            Position pos = new Position(r, c);
-            Piece p = board.get(pos);
-            if (p instanceof King && p.isWhite() == whiteSide) return pos;
+    // Executes a move on this.board without doing legality checks or specials.
+    // Used only inside snapshots where the move was already validated.
+    private void forceMoveNoChecks(Position from, Position to) {
+        Piece p = board.get(from);
+        if (p == null) return;
+
+        int dCol = Math.abs(to.getColumn() - from.getColumn());
+        boolean isPawn = p instanceof Pawn;
+        boolean isKing = p instanceof King;
+
+        // Detect en passant: pawn moves diagonally onto empty square that equals enPassantTarget
+        boolean diagonal = from.getColumn() != to.getColumn();
+        boolean toIsEmpty = board.get(to) == null;
+        boolean ep = isPawn && diagonal && toIsEmpty && enPassantTarget != null && to.equals(enPassantTarget);
+
+        // Detect castling: king moves two columns
+        boolean castle = isKing && dCol == 2;
+
+        // Base move
+        board.set(to, p);
+        board.set(from, null);
+        p.setMoved(true);
+
+        // Apply en passant capture
+        if (ep) {
+            int dir = p.isWhite() ? 1 : -1; // victim behind target
+            Position victim = new Position(to.getRow() + dir, to.getColumn());
+            board.set(victim, null);
         }
-        return null;
+
+        // Apply rook move for castling
+        if (castle) {
+            int row = to.getRow();
+            if (to.getColumn() == 6) {
+                // O-O: rook h -> f
+                Piece rook = board.get(new Position(row, 7));
+                board.set(new Position(row, 5), rook);
+                board.set(new Position(row, 7), null);
+                if (rook != null) rook.setMoved(true);
+            } else if (to.getColumn() == 2) {
+                // O-O-O: rook a -> d
+                Piece rook = board.get(new Position(row, 0));
+                board.set(new Position(row, 3), rook);
+                board.set(new Position(row, 0), null);
+                if (rook != null) rook.setMoved(true);
+            }
+        }
+
+        // For snapshot simulation we don't keep EP availability
+        enPassantTarget = null;
     }
-    
-    private long computeInitialHash() {
-        long hash = 0L;
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                Piece p = board.get(new Position(r, c));
-                if (p != null) {
-                    hash ^= Zobrist.PIECE_KEYS[getPieceIndex(p)][r * 8 + c];
+
+    // --------- King location ----------
+    private Position findKing(boolean whiteSide) {
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                Position pos = new Position(row, col);
+                Piece piece = board.get(pos);
+                if (piece instanceof King && piece.isWhite() == whiteSide) {
+                    return pos;
                 }
             }
         }
-        if (!whiteToMove) {
-            hash ^= Zobrist.BLACK_TO_MOVE_KEY;
-        }
-        return hash;
+        return null;
     }
 
-    private int getPieceIndex(Piece piece) {
-        if (piece instanceof Pawn) return piece.isWhite() ? Zobrist.WHITE_PAWN : Zobrist.BLACK_PAWN;
-        if (piece instanceof Knight) return piece.isWhite() ? Zobrist.WHITE_KNIGHT : Zobrist.BLACK_KNIGHT;
-        if (piece instanceof Bishop) return piece.isWhite() ? Zobrist.WHITE_BISHOP : Zobrist.BLACK_BISHOP;
-        if (piece instanceof Rook) return piece.isWhite() ? Zobrist.WHITE_ROOK : Zobrist.BLACK_ROOK;
-        if (piece instanceof Queen) return piece.isWhite() ? Zobrist.WHITE_QUEEN : Zobrist.BLACK_QUEEN;
-        if (piece instanceof King) return piece.isWhite() ? Zobrist.WHITE_KING : Zobrist.BLACK_KING;
-        return -1;
+    /**
+     * Cria uma cópia rasa do estado atual do jogo.
+     * Permite simular movimentos sem alterar o estado original.
+     */
+    public Game snapshotShallow() {
+        Game g = new Game(true);
+        g.board = this.board.copy(); // IMPORTANT: Board.copy() must deep-copy pieces and fix their board refs.
+        g.whiteToMove = this.whiteToMove;
+        g.gameOver = this.gameOver;
+        g.enPassantTarget = (this.enPassantTarget == null)
+                ? null
+                : new Position(this.enPassantTarget.getRow(), this.enPassantTarget.getColumn());
+        g.history.addAll(this.history);
+        return g;
     }
 
-    private String generateMoveNotation(Position from, Position to, Character promotion) {
-        return coord(from) + "-" + coord(to) + (promotion != null ? "=" + promotion : "");
+    // --------- Notation helpers ----------
+    private void addHistory(String moveStr) {
+        history.add(moveStr);
     }
-    private void addHistory(String moveStr) { history.add(moveStr); }
+
     private String coord(Position p) {
-        return "" + (char)('a' + p.getColumn()) + (8 - p.getRow());
+        char file = (char) ('a' + p.getColumn());
+        int rank = 8 - p.getRow();
+        return "" + file + rank;
     }
 
+    // --------- Initial setup ----------
     private void setupPieces() {
-        board.placePiece(new Rook(board, false), new Position(0, 0));
-        board.placePiece(new Knight(board, false), new Position(0, 1));
-        board.placePiece(new Bishop(board, false), new Position(0, 2));
-        board.placePiece(new Queen(board, false), new Position(0, 3));
-        board.placePiece(new King(board, false), new Position(0, 4));
-        board.placePiece(new Bishop(board, false), new Position(0, 5));
-        board.placePiece(new Knight(board, false), new Position(0, 6));
-        board.placePiece(new Rook(board, false), new Position(0, 7));
-        for (int c = 0; c < 8; c++) board.placePiece(new Pawn(board, false), new Position(1, c));
+        // White back rank (row 7)
         board.placePiece(new Rook(board, true), new Position(7, 0));
         board.placePiece(new Knight(board, true), new Position(7, 1));
         board.placePiece(new Bishop(board, true), new Position(7, 2));
@@ -337,6 +523,23 @@ public class Game {
         board.placePiece(new Bishop(board, true), new Position(7, 5));
         board.placePiece(new Knight(board, true), new Position(7, 6));
         board.placePiece(new Rook(board, true), new Position(7, 7));
-        for (int c = 0; c < 8; c++) board.placePiece(new Pawn(board, true), new Position(6, c));
+        // White pawns (row 6)
+        for (int c = 0; c < 8; c++) {
+            board.placePiece(new Pawn(board, true), new Position(6, c));
+        }
+
+        // Black back rank (row 0)
+        board.placePiece(new Rook(board, false), new Position(0, 0));
+        board.placePiece(new Knight(board, false), new Position(0, 1));
+        board.placePiece(new Bishop(board, false), new Position(0, 2));
+        board.placePiece(new Queen(board, false), new Position(0, 3));
+        board.placePiece(new King(board, false), new Position(0, 4));
+        board.placePiece(new Bishop(board, false), new Position(0, 5));
+        board.placePiece(new Knight(board, false), new Position(0, 6));
+        board.placePiece(new Rook(board, false), new Position(0, 7));
+        // Black pawns (row 1)
+        for (int c = 0; c < 8; c++) {
+            board.placePiece(new Pawn(board, false), new Position(1, c));
+        }
     }
 }
