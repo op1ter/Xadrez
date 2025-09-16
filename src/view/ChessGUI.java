@@ -165,17 +165,17 @@ public class ChessGUI extends JFrame {
 
         newGameItem = new JMenuItem("Novo Jogo");
         newGameItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()));
-        newGameItem.addActionListener(e -> doNewGame());
+        newGameItem.addActionListener((e) -> doNewGame());
 
         pcAsBlack = new JCheckBoxMenuItem("PC joga com as Pretas");
         pcAsBlack.setSelected(false);
-        pcAsBlack.addActionListener(e -> maybeTriggerAI());
+        pcAsBlack.addActionListener((e) -> maybeTriggerAI());
 
         JMenu depthMenu = new JMenu("Profundidade IA");
         SpinnerNumberModel model = new SpinnerNumberModel(1, 1, 4, 1);
         depthSpinner = new JSpinner(model);
         depthSpinner.setToolTipText("Profundidade de busca da IA (Minimax)");
-        depthSpinner.addChangeListener(e -> ai.setDepth((Integer) depthSpinner.getValue()));
+        depthSpinner.addChangeListener((e) -> ai.setDepth((Integer) depthSpinner.getValue()));
         depthMenu.add(depthSpinner);
 
         quitItem = new JMenuItem("Sair");
@@ -201,7 +201,7 @@ public class ChessGUI extends JFrame {
 
         JCheckBox cb = new JCheckBox("PC (Pretas)");
         cb.setSelected(pcAsBlack.isSelected());
-        cb.addActionListener(e -> {
+        cb.addActionListener((e) -> {
             pcAsBlack.setSelected(cb.isSelected());
             maybeTriggerAI();
         });
@@ -209,7 +209,7 @@ public class ChessGUI extends JFrame {
 
         panel.add(new JLabel("Prof. IA:"));
         JSpinner sp = new JSpinner(new SpinnerNumberModel(ai.getDepth(), 1, 4, 1));
-        sp.addChangeListener(e -> ai.setDepth((Integer) sp.getValue()));
+        sp.addChangeListener((e) -> ai.setDepth((Integer) sp.getValue()));
         panel.add(sp);
 
         return panel;
