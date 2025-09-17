@@ -1,49 +1,96 @@
+# RoyalChess
 
-# ChessGame
+## Descrição Geral
 
-ChessGame é um projeto de jogo de xadrez desenvolvido em Java, com interface gráfica baseada em Swing. O objetivo é proporcionar uma experiência completa de xadrez, permitindo partidas entre dois jogadores locais, com destaque visual para movimentos, histórico de jogadas e suporte às principais regras do jogo.
-
-## Principais Funcionalidades
-
-- **Tabuleiro interativo:** Interface gráfica que exibe o tabuleiro 8x8, com peças representadas por imagens.
-- **Movimentação de peças:** Permite selecionar e mover peças conforme as regras do xadrez.
-- **Validação de movimentos:** Apenas movimentos legais são permitidos, incluindo captura, xeque e xeque-mate.
-- **Histórico de jogadas:** Área dedicada para exibir todos os lances realizados na partida.
-- **Temas de cores:** Possibilidade de alternar entre diferentes temas visuais para o tabuleiro.
-- **Destaques visuais:** Casas de seleção, movimentos possíveis e último lance são destacados para facilitar a visualização.
-- **Controle de turno:** Indicação de qual jogador deve jogar (brancas ou pretas).
-- **Novo jogo:** Opção para reiniciar a partida a qualquer momento.
-
-## Estrutura do Projeto
-
-- `src/view/ChessGUI.java`: Interface gráfica principal do jogo.
-- `src/controller/Game.java`: Lógica central do jogo, controle de regras e estado.
-- `src/model/board/Board.java`: Representação do tabuleiro e manipulação de peças.
-- `src/model/pieces/`: Classes das peças (King, Queen, Rook, Bishop, Knight, Pawn).
-- `resources/`: Imagens das peças utilizadas na interface.
-
-## Como Executar
-
-1. Compile todos os arquivos Java:
-	```powershell
-	Remove-Item -Recurse -Force .\out -ErrorAction SilentlyContinue
-	New-Item -ItemType Directory -Force .\out | Out-Null
-	$files = Get-ChildItem -Recurse -Path .\src -Filter *.java | ForEach-Object FullName
-	javac -Xlint:all -encoding UTF-8 -d out $files
-	```
-2. Execute o jogo:
-	```powershell
-	java -cp "out;resources" view.ChessGUI
-	```
-
-## Melhorias Futuras
-
-- Implementação de IA adversária
-- Suporte a partidas online
-- Animações e efeitos visuais
-- Internacionalização da interface
-- Testes automatizados
+RoyalChess é um jogo de xadrez completo desenvolvido em Java, com interface gráfica (Swing), IA de múltiplos níveis, placar de peças capturadas, histórico de jogadas e suporte a todas as regras oficiais do xadrez. O projeto é modularizado em pacotes para facilitar manutenção e expansão.
 
 ---
 
-Desenvolvido para fins acadêmicos. Sinta-se à vontade para contribuir ou sugerir melhorias!
+## Funcionalidades Principais
+
+- **Interface Gráfica Moderna:**
+	- Tabuleiro 8x8 com botões interativos.
+	- Peças exibidas por imagens PNG (em `/resources`) ou Unicode.
+	- Destaque de seleção, movimentos legais e último lance.
+	- Placar de peças capturadas para ambos os lados.
+	- Histórico de jogadas com rolagem.
+	- Barra de status com indicação de vez, xeque e fim de jogo.
+
+- **Menu e Controles:**
+	- Novo jogo.
+	- Sair do jogo.
+	- Alternar se o PC joga com as pretas.
+	- Seleção de nível de dificuldade da IA (Fácil, Médio, Difícil).
+
+- **Regras Oficiais do Xadrez:**
+	- Movimentação completa de todas as peças.
+	- Promoção de peão.
+	- Roque, en passant, xeque, xeque-mate e empate.
+
+- **Placar de Capturas:**
+	- Mostra as peças capturadas de cada lado, atualizando em tempo real.
+
+- **Histórico de Jogadas:**
+	- Exibe todos os lances realizados, numerados e formatados.
+
+---
+
+## Inteligência Artificial (IA)
+
+- **Fácil:**
+	- Joga movimentos aleatórios válidos.
+- **Médio:**
+	- Prioriza capturas e casas centrais.
+- **Difícil:**
+	- Utiliza algoritmo Minimax com Alpha-Beta pruning e busca de quiescência (implementado em `controller/ChessAI.java`).
+	- Ordenação de movimentos por MVV-LVA (capturas mais valiosas primeiro).
+	- Avaliação baseada em material e posição.
+
+A IA pode ser ativada para jogar com as pretas via menu ou checkbox lateral.
+
+---
+
+## Estrutura do Projeto
+
+```
+resources/         # Imagens PNG das peças (bK.png, wQ.png, etc)
+src/
+	ai/              # Algoritmos de IA (níveis, utilitários)
+	controller/      # Lógica do jogo, ChessAI, controle de partidas
+	model/
+		board/         # Representação do tabuleiro, movimentos, posições
+		pieces/        # Classes das peças (Rei, Rainha, etc)
+	view/            # Interface gráfica (ChessGUI, utilitários de imagem)
+```
+
+---
+
+## Como Executar
+
+1. Compile todo o projeto Java (recomendado: use uma IDE como IntelliJ ou VS Code com suporte a Java).
+2. Execute a classe principal:
+	 - `view/ChessGUI.java`
+3. O jogo abrirá uma janela gráfica pronta para jogar.
+
+---
+
+## Observações Técnicas
+
+- O código é orientado a objetos e modular.
+- O tabuleiro e as peças são atualizados em tempo real.
+- O histórico e o placar de capturas são persistentes durante a partida.
+- O projeto pode ser expandido para incluir mais níveis de IA, análise de partidas, exportação PGN, etc.
+
+---
+
+## Créditos
+
+Desenvolvido por João Felipe e colaboradores.
+
+Imagens das peças: domínio público.
+
+---
+
+## Licença
+
+Este projeto é livre para uso acadêmico e pessoal.
