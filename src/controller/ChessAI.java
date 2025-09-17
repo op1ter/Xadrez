@@ -1,18 +1,16 @@
-// ========================= src/controller/ChessAI.java (ALTERADO) =========================
 package controller;
 
-import model.board.Position;
-import model.pieces.Piece;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import model.board.Position;
+import model.pieces.Piece;
 
 public class ChessAI {
 
     private final Game game;
     private int searchDepth;
     private static final Random random = new Random();
-    private final TranspositionTable transpositionTable = new TranspositionTable();
 
     public ChessAI(Game game, int depth) {
         this.game = game;
@@ -28,7 +26,6 @@ public class ChessAI {
     }
 
     public Position[] findBestMove() {
-        transpositionTable.clear(); // Limpa a memória a cada nova jogada
         return findBestMove(searchDepth);
     }
 
@@ -38,12 +35,15 @@ public class ChessAI {
         List<Position[]> bestMoves = new ArrayList<>();
 
         List<Position[]> allMoves = collectAllLegalMovesForSide(this.game);
-        allMoves.sort((move1, move2) -> { /*... ordenação ...*/ return 0; }); // Ordenação ajuda muito
+        // Ordena capturas primeiro (MVV-LVA)
+        allMoves.sort((move1, move2) -> Integer.compare(
+            moveScore(move2, this.game), moveScore(move1, this.game)
+        ));
 
         for (Position[] move : allMoves) {
-            MoveInfo info = game.makeMove(move[0], move[1]);
-            double score = minimax(game, depth - 1, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
-            game.unmakeMove(info);
+            Game clonedGame = game.snapshotShallow();
+            clonedGame.move(move[0], move[1], null);
+            double score = minimax(clonedGame, depth - 1, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
 
             if (isMaximizingPlayer) {
                 if (score > bestScore) {
@@ -67,26 +67,16 @@ public class ChessAI {
         return bestMoves.get(random.nextInt(bestMoves.size()));
     }
 
+    // Ordenação MVV-LVA
+    private int moveScore(Position[] move, Game gameState) {
+        Piece captured = gameState.board().get(move[1]);
+        Piece mover = gameState.board().get(move[0]);
+        int capturedValue = captured != null ? (int)getPieceValue(captured) : 0;
+        int moverValue = mover != null ? (int)getPieceValue(mover) : 0;
+        return capturedValue * 100 - moverValue;
+    }
+
     private double minimax(Game board, int depth, double alpha, double beta) {
-        long hash = board.getZobristHash();
-        double originalAlpha = alpha;
-
-        // 1. VERIFICA NA TABELA DE TRANSPOSIÇÃO
-        TableEntry entry = transpositionTable.probe(hash);
-        if (entry != null && entry.depth >= depth) {
-            if (entry.type == TableEntry.NodeType.EXACT) {
-                return entry.score;
-            } else if (entry.type == TableEntry.NodeType.LOWERBOUND) {
-                alpha = Math.max(alpha, entry.score);
-            } else if (entry.type == TableEntry.NodeType.UPPERBOUND) {
-                beta = Math.min(beta, entry.score);
-            }
-            if (alpha >= beta) {
-                return entry.score;
-            }
-        }
-
-        // 2. CONDIÇÃO DE PARADA -> CHAMA A BUSCA DE QUIESCÊNCIA
         if (depth == 0) {
             return quiescenceSearch(board, alpha, beta);
         }
@@ -100,9 +90,9 @@ public class ChessAI {
         if (board.whiteToMove()) { // Maximizando
             bestScore = Double.NEGATIVE_INFINITY;
             for (Position[] move : allMoves) {
-                MoveInfo info = board.makeMove(move[0], move[1]);
-                double eval = minimax(board, depth - 1, alpha, beta);
-                board.unmakeMove(info);
+                Game clonedGame = board.snapshotShallow();
+                clonedGame.move(move[0], move[1], null);
+                double eval = minimax(clonedGame, depth - 1, alpha, beta);
                 bestScore = Math.max(bestScore, eval);
                 alpha = Math.max(alpha, eval);
                 if (beta <= alpha) break;
@@ -110,33 +100,17 @@ public class ChessAI {
         } else { // Minimizando
             bestScore = Double.POSITIVE_INFINITY;
             for (Position[] move : allMoves) {
-                MoveInfo info = board.makeMove(move[0], move[1]);
-                double eval = minimax(board, depth - 1, alpha, beta);
-                board.unmakeMove(info);
+                Game clonedGame = board.snapshotShallow();
+                clonedGame.move(move[0], move[1], null);
+                double eval = minimax(clonedGame, depth - 1, alpha, beta);
                 bestScore = Math.min(bestScore, eval);
                 beta = Math.min(beta, eval);
                 if (beta <= alpha) break;
             }
         }
-
-        // 3. SALVA O RESULTADO NA TABELA ANTES DE RETORNAR
-        TableEntry.NodeType type;
-        if (bestScore <= originalAlpha) {
-            type = TableEntry.NodeType.UPPERBOUND;
-        } else if (bestScore >= beta) {
-            type = TableEntry.NodeType.LOWERBOUND;
-        } else {
-            type = TableEntry.NodeType.EXACT;
-        }
-        transpositionTable.store(hash, new TableEntry(bestScore, depth, type));
-
         return bestScore;
     }
 
-    /**
-     * NOVO MÉTODO: Busca de Quiescência
-     * Analisa apenas capturas para evitar o "efeito horizonte".
-     */
     private double quiescenceSearch(Game board, double alpha, double beta) {
         double standPatScore = evaluateBoard(board);
 
@@ -146,35 +120,33 @@ public class ChessAI {
         alpha = Math.max(alpha, standPatScore);
 
         List<Position[]> captureMoves = collectAllLegalCaptureMoves(board);
-        // Idealmente, ordenar capturas por valor (MVV-LVA)
+        captureMoves.sort((move1, move2) -> Integer.compare(
+            moveScore(move2, board), moveScore(move1, board)
+        ));
 
         for (Position[] capture : captureMoves) {
-            MoveInfo info = board.makeMove(capture[0], capture[1]);
-            double score = -quiescenceSearch(board, -beta, -alpha); // Técnica NegaMax
-            board.unmakeMove(info);
-
+            Game clonedGame = board.snapshotShallow();
+            clonedGame.move(capture[0], capture[1], null);
+            double score = quiescenceSearch(clonedGame, alpha, beta);
             if (score >= beta) {
-                return beta; // Falha alta
+                return beta;
             }
             alpha = Math.max(alpha, score);
         }
         return alpha;
     }
 
-    // Método auxiliar para a busca de quiescência
     private List<Position[]> collectAllLegalCaptureMoves(Game gameState) {
         List<Position[]> moves = new ArrayList<>();
         for (Position[] move : collectAllLegalMovesForSide(gameState)) {
-            if (gameState.board().get(move[1]) != null) { // Se a casa de destino não está vazia
+            if (gameState.board().get(move[1]) != null) {
                 moves.add(move);
             }
-            // Adicionar lógica para En Passant também
         }
         return moves;
     }
 
     private double evaluateBoard(Game board) {
-        // Sua função de avaliação (pode ser aprimorada com Piece-Square Tables)
         double score = 0;
         for (Piece p : board.board().pieces(true)) score += getPieceValue(p);
         for (Piece p : board.board().pieces(false)) score -= getPieceValue(p);
@@ -183,10 +155,15 @@ public class ChessAI {
 
     private double getPieceValue(Piece p) {
         if (p == null) return 0;
-        return switch (p.getSymbol()) {
-            case "P" -> 10; case "N", "B" -> 30; case "R" -> 50; case "Q" -> 90; case "K" -> 20000;
-            default -> 0;
-        };
+        switch (p.getSymbol()) {
+            case "P": return 10;
+            case "N": return 30;
+            case "B": return 30;
+            case "R": return 50;
+            case "Q": return 90;
+            case "K": return 20000;
+            default: return 0;
+        }
     }
     
     private List<Position[]> collectAllLegalMovesForSide(Game gameState) {
