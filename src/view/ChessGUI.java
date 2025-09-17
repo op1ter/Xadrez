@@ -108,7 +108,7 @@ public class ChessGUI extends JFrame {
         history.setEditable(false);
         history.setFont(new Font(Font.MONOSPACED, Font.BOLD, 14));
         history.setForeground(Color.WHITE);
-        history.setBackground(LIGHT_SQUARE);
+        history.setBackground(new Color(30, 144, 255)); // Azul claro
         historyScroll = new JScrollPane(history);
 
         // Painel lateral direito (histórico + controles)
@@ -514,7 +514,7 @@ public class ChessGUI extends JFrame {
             chk = " — PC pensando...";
         status.setText("Jogada: " + side + chk);
 
-        history.setBackground(LIGHT_SQUARE);
+        history.setBackground(new Color(30, 144, 255)); // Azul claro
 
         StringBuilder sb = new StringBuilder();
         var hist = game.history();
